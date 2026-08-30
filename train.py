@@ -68,17 +68,16 @@ class ReplayBuffer:
         
         return obs_tensor, act_tensor, rew_tensor, cont_tensor
 
-def compute_lambda_returns(rewards, continues, values, lambda_=0.95, gamma=0.99):
+def compute_lambda_returns(rewards, continues, next_values, lambda_=0.95, gamma=0.99):
     """Computes generalized lambda returns for Actor-Critic."""
     H, B = rewards.shape[:2]
-    returns = torch.zeros_like(values)
+    returns = torch.zeros_like(next_values)
     
     # Bootstrap from the last value
-    last_val = values[-1]
+    last_val = next_values[-1]
     
     for t in reversed(range(H)):
-        next_val = values[t + 1] if t + 1 < H else values[-1]
-        returns[t] = rewards[t] + continues[t] * gamma * ((1 - lambda_) * next_val + lambda_ * last_val)
+        returns[t] = rewards[t] + continues[t] * gamma * ((1 - lambda_) * next_values[t] + lambda_ * last_val)
         last_val = returns[t]
     return returns
 
@@ -177,11 +176,17 @@ def train():
                     rec_obs = world_model.decoder(post_states)
                     rec_loss = F.mse_loss(rec_obs, symlog(b_obs))
                     
+                    # Shift rewards and continues by 1 step because post_states_t
+                    # does not know act_t. It should predict the reward/continue
+                    # from act_{t-1} that resulted in obs_t.
+                    b_rew_shifted = torch.cat([torch.zeros_like(b_rew[:, :1]), b_rew[:, :-1]], dim=1)
+                    b_cont_shifted = torch.cat([torch.ones_like(b_cont[:, :1]), b_cont[:, :-1]], dim=1)
+
                     rew_preds = world_model.reward_predictor(post_states)
-                    rew_loss = twohot_loss(rew_preds, symlog(b_rew.squeeze(-1)))
+                    rew_loss = twohot_loss(rew_preds, symlog(b_rew_shifted.squeeze(-1)))
                     
                     cont_preds = world_model.continue_predictor(post_states)
-                    cont_loss = F.binary_cross_entropy_with_logits(cont_preds.squeeze(-1), b_cont)
+                    cont_loss = F.binary_cross_entropy_with_logits(cont_preds.squeeze(-1), b_cont_shifted)
                     
                     kl_loss = world_model.kl_loss(post_logits, prior_logits)
                     
