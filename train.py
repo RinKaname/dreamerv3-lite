@@ -68,17 +68,16 @@ class ReplayBuffer:
         
         return obs_tensor, act_tensor, rew_tensor, cont_tensor
 
-def compute_lambda_returns(rewards, continues, values, lambda_=0.95, gamma=0.99):
+def compute_lambda_returns(rewards, continues, next_values, lambda_=0.95, gamma=0.99):
     """Computes generalized lambda returns for Actor-Critic."""
     H, B = rewards.shape[:2]
-    returns = torch.zeros_like(values)
+    returns = torch.zeros_like(next_values)
     
     # Bootstrap from the last value
-    last_val = values[-1]
+    last_val = next_values[-1]
     
     for t in reversed(range(H)):
-        next_val = values[t + 1] if t + 1 < H else values[-1]
-        returns[t] = rewards[t] + continues[t] * gamma * ((1 - lambda_) * next_val + lambda_ * last_val)
+        returns[t] = rewards[t] + continues[t] * gamma * ((1 - lambda_) * next_values[t] + lambda_ * last_val)
         last_val = returns[t]
     return returns
 
