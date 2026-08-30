@@ -55,10 +55,10 @@ class ReplayBuffer:
             # Fallback if buffer is too fragmented
             start_indices = list(np.random.randint(0, max(1, self.size - seq_len), size=batch_size))
             
-        obs_seq = np.stack([self.obs[i : i + seq_len] for i in start_indices])
-        act_seq = np.stack([self.actions[i : i + seq_len] for i in start_indices])
-        rew_seq = np.stack([self.rewards[i : i + seq_len] for i in start_indices])
-        don_seq = np.stack([self.dones[i : i + seq_len] for i in start_indices])
+        obs_seq = np.stack([self.obs[i : i + seq_len + 1] for i in start_indices])
+        act_seq = np.stack([self.actions[i : i + seq_len + 1] for i in start_indices])
+        rew_seq = np.stack([self.rewards[i : i + seq_len + 1] for i in start_indices])
+        don_seq = np.stack([self.dones[i : i + seq_len + 1] for i in start_indices])
         
         # Keep obs in [0, 255] range for the Encoder's symlog
         obs_tensor = torch.tensor(obs_seq, dtype=torch.float32, device=device).permute(0, 1, 4, 2, 3)
@@ -176,17 +176,11 @@ def train():
                     rec_obs = world_model.decoder(post_states)
                     rec_loss = F.mse_loss(rec_obs, symlog(b_obs))
                     
-                    # Shift rewards and continues by 1 step because post_states_t
-                    # does not know act_t. It should predict the reward/continue
-                    # from act_{t-1} that resulted in obs_t.
-                    b_rew_shifted = torch.cat([torch.zeros_like(b_rew[:, :1]), b_rew[:, :-1]], dim=1)
-                    b_cont_shifted = torch.cat([torch.ones_like(b_cont[:, :1]), b_cont[:, :-1]], dim=1)
-
                     rew_preds = world_model.reward_predictor(post_states)
-                    rew_loss = twohot_loss(rew_preds, symlog(b_rew_shifted.squeeze(-1)))
+                    rew_loss = twohot_loss(rew_preds[:, 1:], symlog(b_rew[:, :-1].squeeze(-1)))
                     
                     cont_preds = world_model.continue_predictor(post_states)
-                    cont_loss = F.binary_cross_entropy_with_logits(cont_preds.squeeze(-1), b_cont_shifted)
+                    cont_loss = F.binary_cross_entropy_with_logits(cont_preds[:, 1:].squeeze(-1), b_cont[:, :-1])
                     
                     kl_loss = world_model.kl_loss(post_logits, prior_logits)
                     
