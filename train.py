@@ -176,11 +176,17 @@ def train():
                     rec_obs = world_model.decoder(post_states)
                     rec_loss = F.mse_loss(rec_obs, symlog(b_obs))
                     
+                    # Shift rewards and continues by 1 step because post_states_t
+                    # does not know act_t. It should predict the reward/continue
+                    # from act_{t-1} that resulted in obs_t.
+                    b_rew_shifted = torch.cat([torch.zeros_like(b_rew[:, :1]), b_rew[:, :-1]], dim=1)
+                    b_cont_shifted = torch.cat([torch.ones_like(b_cont[:, :1]), b_cont[:, :-1]], dim=1)
+
                     rew_preds = world_model.reward_predictor(post_states)
-                    rew_loss = twohot_loss(rew_preds, symlog(b_rew.squeeze(-1)))
+                    rew_loss = twohot_loss(rew_preds, symlog(b_rew_shifted.squeeze(-1)))
                     
                     cont_preds = world_model.continue_predictor(post_states)
-                    cont_loss = F.binary_cross_entropy_with_logits(cont_preds.squeeze(-1), b_cont)
+                    cont_loss = F.binary_cross_entropy_with_logits(cont_preds.squeeze(-1), b_cont_shifted)
                     
                     kl_loss = world_model.kl_loss(post_logits, prior_logits)
                     
