@@ -245,12 +245,9 @@ class WorldModel(nn.Module):
         prior_logits_list = []
         post_logits_list = []
         
-        # Shift mask by 1 so we reset the state IF the PREVIOUS step ended the episode
-        mask_seq = torch.cat([torch.ones_like(cont[:, :1]), cont[:, :-1]], dim=1)
-
         for t in range(T):
             # If boundary, reset state
-            mask = mask_seq[:, t].unsqueeze(-1)
+            mask = cont[:, t].unsqueeze(-1)
             h = h * mask
             z = z * mask
             
