@@ -23,7 +23,7 @@ IMAGINE_HORIZON = 15
 
 # --- Replay Buffer ---
 class ReplayBuffer:
-    def __init__(self, capacity=100_000):
+    def __init__(self, capacity=300_000):
         self.capacity = capacity
         self.obs = np.empty((capacity, 64, 64, 3), dtype=np.uint8)
         self.actions = np.empty(capacity, dtype=np.int64)
@@ -101,7 +101,7 @@ def train():
     wm_opt = torch.optim.Adam(world_model.parameters(), lr=1e-4, eps=1e-8)
     ac_opt = torch.optim.Adam(actor_critic.parameters(), lr=3e-5, eps=1e-5)
     
-    buffer = ReplayBuffer(capacity=100_000)
+    buffer = ReplayBuffer(capacity=300_000)
     
     # --- Load Human Demonstrations (Imitation Learning) ---
     human_dir = "./human_data"
@@ -125,6 +125,9 @@ def train():
         buffer.add(obs, act, rew, done)
         obs = env.reset() if done else next_obs
 
+    ep_reward = 0.0
+    recent_returns = []
+
     print("Starting Training...")
     pbar = tqdm(range(TOTAL_STEPS), desc="Training Steps")
     
@@ -141,18 +144,16 @@ def train():
                 action = actor_critic.select_action(feat, explore=True).item()
 
         next_obs, rew, done, info = env.step(action)
+        ep_reward += rew
         
-        # Dense reward shaping for early game
-        shaped_rew = rew
-        if isinstance(info, dict) and 'achievements' in info:
-            ach = info['achievements']
-            if ach.get('collect_wood', 0) > 0: shaped_rew += 2.0
-            if ach.get('place_table', 0) > 0: shaped_rew += 5.0
-            if ach.get('collect_stone', 0) > 0: shaped_rew += 2.0
-            
-        buffer.add(obs, action, shaped_rew, done)
+        buffer.add(obs, action, rew, done)
         
         if done:
+            recent_returns.append(ep_reward)
+            if len(recent_returns) > 10:
+                recent_returns.pop(0)
+            ep_reward = 0.0
+
             obs = env.reset()
             h, z = world_model.rssm.initial_state(batch_size=1, device=device)
         else:
@@ -240,7 +241,9 @@ def train():
                 torch.cuda.empty_cache()
 
             if step % 500 == 0:
+                avg_ret = np.mean(recent_returns) if recent_returns else 0.0
                 pbar.set_postfix({
+                    "Ret": f"{avg_ret:.1f}",
                     "WM_L": f"{wm_total_loss.item():.2f}",
                     "AC_L": f"{ac_total_loss.item():.2f}",
                     "VRAM": f"{torch.cuda.memory_allocated() / (1024**2):.0f}MB"
