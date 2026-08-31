@@ -1,0 +1,6 @@
+print("Also, ReplayBuffer sampling:")
+print("sample_sequence has a while loop:")
+print("while len(start_indices) < batch_size and attempts < max_attempts:")
+print("If batch_size is 32, it has to find 32 valid non-terminal sequences.")
+print("If the buffer is small (early in training) or highly fragmented, this while loop might spin 32*20 = 640 times per update.")
+print("This CPU overhead can also slow things down.")

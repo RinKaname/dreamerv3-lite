@@ -1,0 +1,8 @@
+print("In train.py:")
+print("BATCH_SIZE = 4")
+print("SEQ_LEN = 50")
+print("When batch size is increased to 32:")
+print("1. GPU Utilization: The model is small (9M params). A batch size of 4x50=200 steps might already saturate the compute cores of a smaller GPU, or at least keep them busy. Increasing to 32x50=1600 steps means 8x more computation per step.")
+print("2. Environment steps: The training loop does 1 env step, then TRAIN_STEPS network updates.")
+print("If you do TRAIN_STEPS=1 and batch_size=32, you are doing 8x more compute per env step.")
+print("Because TOTAL_STEPS=100_000 is the number of ENV steps, doing more compute per env step directly increases the wall-clock time to finish the 100k steps.")
